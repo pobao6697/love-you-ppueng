@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>풍선 터뜨리기 (气球小游戏)</title>
+  
+  <style>
+    :root {
+      --wind-offset: 12px;
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      font-family: "Apple SD Gothic Neo", "Segoe UI", "Malgun Gothic", sans-serif;
+      overflow: hidden;
+      touch-action: manipulation;
+      background: #a1c4fd;
+    }
+
+    /* 唯美梦幻天空背景 */
+    .park-scene {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: linear-gradient(180deg, #a1c4fd 0%, #c2e9fb 45%, #fbc2eb 80%, #a6c1ee 100%);
+    }
+
+    /* 太阳与柔光晕 */
+    .sun {
+      position: absolute;
+      top: 30px;
+      right: 50px;
+      width: 110px;
+      height: 110px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #ffffff 0%, #fff2b2 30%, #ffd06a 70%, rgba(255, 208, 106, 0) 100%);
+      box-shadow: 0 0 50px rgba(255, 220, 120, 0.85);
+      z-index: 1;
+      animation: sunGlow 4s ease-in-out infinite alternate;
+    }
+
+    /* 悬浮粒子 Canvas */
+    canvas#particleCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    /* 漂浮云朵 */
+    .cloud {
+      position: absolute;
+      background: rgba(255, 255, 255, 0.78);
+      border-radius: 100px;
+      backdrop-filter: blur(4px);
+      box-shadow: 0 8px 20px rgba(255, 255, 255, 0.4);
+      z-index: 2;
+    }
+
+    .cloud::before,
+    .cloud::after {
+      content: "";
+      position: absolute;
+      background: rgba(255, 255, 255, 0.85);
+      border-radius: 50%;
+    }
+
+    .cloud-one {
+      top: 50px;
+      left: -40px;
+      width: 150px;
+      height: 48px;
+      animation: floatCloud 30s linear infinite;
+    }
+    .cloud-one::before { width: 62px; height: 62px; left: 18px; top: -26px; }
+    .cloud-one::after { width: 70px; height: 70px; right: 18px; top: -30px; }
+
+    .cloud-two {
+      top: 120px;
+      right: -50px;
+      width: 170px;
+      height: 52px;
+      animation: floatCloudReverse 38s linear infinite;
+    }
+    .cloud-two::before { width: 68px; height: 68px; left: 20px; top: -28px; }
+    .cloud-two::after { width: 78px; height: 78px; right: 20px; top: -32px; }
+
+    /* 游戏主体容器 */
+    .game-panel {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .title-wrap {
+      text-align: center;
+      padding: 20px 0 6px 0;
+      flex-shrink: 0;
+    }
+
+    h1 {
+      margin: 0;
+      color: #1e3c72;
+      font-size: clamp(28px, 5vw, 46px);
+      letter-spacing: -1px;
+      text-shadow: 2px 3px 6px rgba(255, 255, 255, 0.9);
+      font-weight: 900;
+    }
+
+    /* 开始屏 */
+    .start-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+    }
+
+    .start-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      border: none;
+      border-radius: 36px;
+      padding: 30px 60px;
+      font-size: clamp(26px, 4.5vw, 38px);
+      font-weight: 900;
+      color: #fff;
+      background: linear-gradient(135deg, #ff7eb6 0%, #ff5aa7 50%, #ff488f 100%);
+      box-shadow: 0 18px 35px rgba(255, 88, 158, 0.45);
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    .start-btn:hover {
+      transform: translateY(-3px) scale(1.03);
+    }
+
+    .start-btn:active {
+      transform: translateY(2px) scale(0.97);
+    }
+
+    /* HUD 抬头显示 */
+    .hud {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      padding: 10px 0;
+      flex-shrink: 0;
+    }
+
+    .info-box {
+      min-width: 140px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 22px;
+      border-radius: 24px;
+      background: rgba(255, 255, 255, 0.7);
+      backdrop-filter: blur(10px);
+      border: 2px solid rgba(255, 255, 255, 0.9);
+      box-shadow: 0 8px 20px rgba(31, 38, 135, 0.1);
+      color: #2c3e50;
+      font-size: 1.1rem;
+      font-weight: 800;
+    }
+
+    .info-box strong {
+      font-size: 1.8rem;
+      min-width: 50px;
+      text-align: right;
+      color: #ff3377;
+    }
+
+    /* Combo 连击徽章 */
+    .combo-badge {
+      position: absolute;
+      top: 85px;
+      right: 25px;
+      background: linear-gradient(135deg, #ff007f, #ff758c);
+      color: #ffffff;
+      font-size: 1.3rem;
+      font-weight: 900;
+      padding: 6px 18px;
+      border-radius: 20px;
+      box-shadow: 0 6px 20px rgba(255, 0, 127, 0.4);
+      border: 2px solid #ffffff;
+      transform: scale(0);
+      transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .combo-badge.active {
+      transform: scale(1) rotate(-4deg);
+      animation: comboPulse 0.3s ease-out;
+    }
+
+    /* 气球游戏区域 */
+    .game-area {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      overflow: hidden;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(168, 230, 207, 0.3) 75%, rgba(117, 201, 155, 0.6) 100%);
+    }
+
+    .game-area::before {
+      content: "";
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      height: 16%;
+      background: linear-gradient(180deg, rgba(142, 214, 155, 0) 0%, rgba(103, 194, 128, 0.85) 100%);
+      pointer-events: none;
+    }
+
+    /* 晶莹马卡龙气球 */
+    .balloon {
+      position: absolute;
+      border: none;
+      border-radius: 50% 50% 48% 48% / 45% 45% 55% 55%;
+      cursor: pointer;
+      box-shadow: 
+        inset -10px -12px 18px rgba(0, 0, 0, 0.12),
+        inset 8px 10px 14px rgba(255, 255, 255, 0.7),
+        0 14px 22px rgba(35, 20, 60, 0.15);
+      animation: floatWithWind 4.5s ease-in-out infinite;
+      transition: transform 0.08s ease;
+      outline: none;
+      touch-action: manipulation;
+    }
+
+    .balloon::before {
+      content: "";
+      position: absolute;
+      width: 3px;
+      height: 65px;
+      left: 50%;
+      top: 98%;
+      transform: translateX(-50%);
+      background: linear-gradient(180deg, rgba(120, 120, 120, 0.5), rgba(180, 180, 180, 0.1));
+      border-radius: 999px;
+      transform-origin: top center;
+    }
+
+    /* 气球结 (Knot) */
+    .balloon::after {
+      content: "";
+      position: absolute;
+      width: 10px;
+      height: 8px;
+      bottom: -6px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: inherit;
+      border-radius: 30% 30% 50% 50%;
+      filter: brightness(0.85);
+    }
+
+    .balloon-shine {
+      position: absolute;
+      width: 26%;
+      height: 26%;
+      top: 15%;
+      left: 18%;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.2) 70%, transparent 100%);
+      pointer-events: none;
+    }
+
+    .balloon.burst {
+      animation: burstPop 0.3s ease-out forwards;
+      pointer-events: none;
+    }
+
+    /* 浮动提示标语 */
+    .floating-message {
+      position: fixed;
+      left: 50%;
+      top: 38%;
+      transform: translate(-50%, -50%) scale(0.7);
+      opacity: 0;
+      z-index: 25;
+      padding: 12px 28px;
+      border-radius: 24px;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(12px);
+      border: 3px solid rgba(255, 255, 255, 0.98);
+      box-shadow: 0 20px 45px rgba(255, 92, 147, 0.25);
+      color: #ff2d82;
+      font-size: clamp(20px, 3.2vw, 32px);
+      font-weight: 900;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    .floating-message.show {
+      animation: messagePop 1.1s ease forwards;
+    }
+
+    /* 结算界面 */
+    .final-message {
+      position: fixed;
+      left: 50%;
+      top: 45%;
+      transform: translate(-50%, -50%);
+      width: min(86%, 460px);
+      z-index: 35;
+      text-align: center;
+      padding: 38px 28px;
+      border-radius: 36px;
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(16px);
+      border: 4px solid #ffffff;
+      box-shadow: 0 25px 65px rgba(30, 60, 115, 0.25);
+      color: #ff2f86;
+      font-size: clamp(28px, 6vw, 46px);
+      font-weight: 900;
+      letter-spacing: -1px;
+      animation: successPulse 1.2s ease-in-out infinite alternate;
+    }
+
+    .restart-btn {
+      position: fixed;
+      bottom: 50px;
+      left: 50%;
+      transform: translateX(-50%);
+      border: none;
+      border-radius: 999px;
+      padding: 18px 48px;
+      background: linear-gradient(135deg, #ff7eb6 0%, #ff5ca7 100%);
+      color: white;
+      font-size: 1.35rem;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: 0 14px 30px rgba(255, 92, 163, 0.45);
+      z-index: 35;
+      transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    .restart-btn:hover {
+      transform: translateX(-50%) scale(1.06);
+    }
+
+    .hidden { display: none !important; }
+
+    @keyframes sunGlow {
+      0% { transform: scale(1); filter: drop-shadow(0 0 15px rgba(255,215,0,0.6)); }
+      100% { transform: scale(1.08); filter: drop-shadow(0 0 35px rgba(255,215,0,0.9)); }
+    }
+
+    @keyframes floatCloud {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(calc(100vw + 200px)); }
+    }
+
+    @keyframes floatCloudReverse {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(calc(-100vw - 250px)); }
+    }
+
+    @keyframes floatWithWind {
+      0%, 100% { transform: translateY(0px) rotate(-3deg); }
+      50% { transform: translateY(-14px) rotate(3deg); }
+    }
+
+    @keyframes comboPulse {
+      0% { transform: scale(0.8) rotate(-4deg); }
+      50% { transform: scale(1.25) rotate(-4deg); }
+      100% { transform: scale(1) rotate(-4deg); }
+    }
+
+    @keyframes burstPop {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.4); }
+      100% { opacity: 0; transform: scale(1.8); }
+    }
+
+    @keyframes messagePop {
+      0% { opacity: 0; transform: translate(-50%, -40%) scale(0.7); }
+      20% { opacity: 1; transform: translate(-50%, -55%) scale(1.1); }
+      75% { opacity: 1; transform: translate(-50%, -80%) scale(1); }
+      100% { opacity: 0; transform: translate(-50%, -105%) scale(1.2); }
+    }
+
+    @keyframes successPulse {
+      from { transform: translate(-50%, -50%) scale(0.96); }
+      to { transform: translate(-50%, -50%) scale(1.03); }
+    }
+  </style>
+</head>
+<body>
+  <div class="park-scene">
+    <div class="sun"></div>
+    <canvas id="particleCanvas"></canvas>
+
+    <div class="cloud cloud-one"></div>
+    <div class="cloud cloud-two"></div>
+
+    <div class="game-panel">
+      <div class="title-wrap">
+        <h1>풍선 터뜨리기</h1>
+      </div>
+
+      <div id="startScreen" class="start-screen">
+        <button id="startBtn" class="start-btn" type="button">
+          <span>쟈끼이~!!</span>
+          <span>게임시작!!</span>
+        </button>
+      </div>
+
+      <div id="hud" class="hud hidden">
+        <div class="info-box">
+          <span>남은 시간</span>
+          <strong id="timeLeft">10</strong>
+        </div>
+        <div class="info-box">
+          <span>점수</span>
+          <strong id="score">0</strong>
+        </div>
+      </div>
+
+      <div id="comboBadge" class="combo-badge">Combo x2!</div>
+
+      <div id="gameArea" class="game-area hidden" aria-live="polite"></div>
+
+      <div id="floatingMessage" class="floating-message"></div>
+      <div id="finalMessage" class="final-message hidden"></div>
+
+      <button id="restartBtn" class="restart-btn hidden" type="button">다시 하기</button>
+    </div>
+  </div>
+
+  <script>
+    const phrases = [
+      '세현아',
+      '잘 도착 했옹?',
+      '저녁 뭐 먹엉!',
+      '짜끼이~~~!!',
+      '사랑해~~~',
+      '오늘도 고생 많아쬽!!'
+    ];
+
+    const colors = [
+      'rgba(255, 119, 185, 0.92)',
+      'rgba(255, 140, 66, 0.92)',
+      'rgba(125, 211, 252, 0.92)',
+      'rgba(255, 209, 102, 0.92)',
+      'rgba(138, 233, 138, 0.92)',
+      'rgba(184, 146, 255, 0.92)',
+      'rgba(255, 107, 107, 0.92)'
+    ];
+
+    const timeLimit = 10;
+    const maxPossibleScore = 500;
+    const COMBO_WINDOW_MS = 1000; // 连击允许的最大间隔时间（毫秒）
+
+    const startBtn = document.getElementById('startBtn');
+    const startScreen = document.getElementById('startScreen');
+    const hud = document.getElementById('hud');
+    const gameArea = document.getElementById('gameArea');
+    const timeLeftEl = document.getElementById('timeLeft');
+    const scoreEl = document.getElementById('score');
+    const comboBadge = document.getElementById('comboBadge');
+    const floatingMessageEl = document.getElementById('floatingMessage');
+    const finalMessageEl = document.getElementById('finalMessage');
+    const restartBtn = document.getElementById('restartBtn');
+
+    let remainingTime = timeLimit;
+    let score = 0;
+    let timerId = null;
+    let balloonSpawnerId = null;
+    let gameFinished = false;
+    let audioCtx = null;
+    let musicInterval = null;
+
+    // 连击控制状态变量
+    let comboCount = 0;
+    let lastPopTime = 0;
+
+    /* Web Audio 音效系统 */
+    function ensureAudio() {
+      if (!audioCtx) {
+        const AudioCtor = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtor) audioCtx = new AudioCtor();
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      return audioCtx;
+    }
+
+    function playTone(freq, duration = 0.12, volume = 0.08, type = 'triangle') {
+      const ctx = ensureAudio();
+      if (!ctx) return;
+      try {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(volume, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + duration);
+      } catch (e) {}
+    }
+
+    function playPopSound(pitchMultiplier = 1) {
+      playTone(320 * pitchMultiplier, 0.08, 0.12, 'square');
+      setTimeout(() => playTone(160 * pitchMultiplier, 0.1, 0.08, 'sawtooth'), 35);
+    }
+
+    function startBackgroundMusic() {
+      const ctx = ensureAudio();
+      if (!ctx || musicInterval) return;
+
+      const melody = [523.25, 659.25, 783.99, 659.25, 587.33, 659.25, 783.99];
+      let step = 0;
+
+      musicInterval = setInterval(() => {
+        if (gameFinished) {
+          clearInterval(musicInterval);
+          musicInterval = null;
+          return;
+        }
+        playTone(melody[step % melody.length], 0.2, 0.025, 'triangle');
+        step += 1;
+      }, 400);
+    }
+
+    /* 显示随机温馨标语 */
+    function showFloatingMessage() {
+      const phrase = phrases[Math.floor(Math.random() * phrases.length)];
+      floatingMessageEl.textContent = phrase;
+      floatingMessageEl.classList.remove('show');
+      void floatingMessageEl.offsetWidth;
+      floatingMessageEl.classList.add('show');
+    }
+
+    /* 核心逻辑：生成气球与计分机制 */
+    function makeBalloon() {
+      if (gameFinished) return;
+
+      const balloon = document.createElement('button');
+      balloon.type = 'button';
+      balloon.className = 'balloon';
+
+      // 气球尺寸分布与基础分
+      const sizeRandom = Math.random();
+      let size, baseScore;
+      if (sizeRandom < 0.3) {
+        size = 58 + Math.random() * 8; // 小气球（高难高分）
+        baseScore = 30;
+      } else if (sizeRandom < 0.75) {
+        size = 70 + Math.random() * 10; // 中等气球
+        baseScore = 22;
+      } else {
+        size = 84 + Math.random() * 12; // 大气球（易击破）
+        baseScore = 15;
+      }
+
+      const gameWidth = gameArea.clientWidth || window.innerWidth;
+      const gameHeight = gameArea.clientHeight || (window.innerHeight * 0.55);
+
+      const x = Math.random() * Math.max(10, gameWidth - size - 25);
+      const y = Math.random() * Math.max(20, gameHeight - size - 70);
+
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      balloon.style.width = `${size}px`;
+      balloon.style.height = `${size * 1.2}px`;
+      balloon.style.left = `${x}px`;
+      balloon.style.top = `${y}px`;
+      balloon.style.background = `radial-gradient(circle at 38% 28%, #ffffff 0%, rgba(255,255,255,0.7) 15%, ${color} 45%, ${color} 85%, rgba(180, 50, 120, 0.8) 100%)`;
+
+      const shine = document.createElement('div');
+      shine.className = 'balloon-shine';
+      balloon.appendChild(shine);
+
+      /* 点击气球逻辑 */
+      const handlePop = (e) => {
+        e.preventDefault();
+        if (gameFinished || balloon.classList.contains('burst')) return;
+
+        ensureAudio();
+        startBackgroundMusic();
+
+        const now = Date.now();
+        // 判断是否在连击时间窗口 (1.0秒内)
+        if (lastPopTime > 0 && (now - lastPopTime <= COMBO_WINDOW_MS)) {
+          comboCount += 1;
+        } else {
+          comboCount = 1; // 超时，连击重置
+        }
+        lastPopTime = now;
+
+        // 计算倍率: 1.0x -> 1.2x -> 1.4x -> 1.7x -> 2.0x (MAX)
+        let comboMultiplier = 1.0;
+        if (comboCount === 2) comboMultiplier = 1.2;
+        else if (comboCount === 3) comboMultiplier = 1.4;
+        else if (comboCount === 4) comboMultiplier = 1.7;
+        else if (comboCount >= 5) comboMultiplier = 2.0;
+
+        // 音效随连击数升高
+        playPopSound(Math.min(1.6, 1 + (comboCount - 1) * 0.12));
+
+        // 连击 UI 提示
+        if (comboCount >= 2) {
+          comboBadge.textContent = `Combo x${comboCount}!`;
+          comboBadge.classList.add('active');
+        } else {
+          comboBadge.classList.remove('active');
+        }
+
+        // 计算本次实际得分
+        const earnedScore = Math.round(baseScore * comboMultiplier);
+        score = Math.min(maxPossibleScore, score + earnedScore);
+        scoreEl.textContent = String(score);
+
+        showFloatingMessage();
+
+        balloon.classList.add('burst');
+        setTimeout(() => balloon.remove(), 300);
+
+        // 实时补给气球
+        setTimeout(() => {
+          if (!gameFinished && gameArea.children.length < 7) {
+            makeBalloon();
+          }
+        }, 120);
+      };
+
+      balloon.addEventListener('click', handlePop);
+      gameArea.appendChild(balloon);
+    }
+
+    /* 检查连击超时 */
+    function checkComboTimeout() {
+      if (comboCount > 0 && Date.now() - lastPopTime > COMBO_WINDOW_MS) {
+        comboCount = 0;
+        comboBadge.classList.remove('active');
+      }
+    }
+
+    function updateTimer() {
+      remainingTime -= 1;
+      timeLeftEl.textContent = String(Math.max(0, remainingTime));
+
+      checkComboTimeout();
+
+      if (remainingTime <= 0) {
+        finishGame();
+      }
+    }
+
+    /* 结算界面（严格展示指定文案） */
+    function finishGame() {
+      if (gameFinished) return;
+
+      clearInterval(timerId);
+      clearInterval(balloonSpawnerId);
+      gameFinished = true;
+
+      gameArea.innerHTML = '';
+      comboBadge.classList.remove('active');
+
+      // 严格要求格式：뿌엥 {score}점~~
+      finalMessageEl.textContent = `뿌엥 ${score}점~~`;
+      finalMessageEl.classList.remove('hidden');
+      restartBtn.classList.remove('hidden');
+
+      if (musicInterval) {
+        clearInterval(musicInterval);
+        musicInterval = null;
+      }
+    }
+
+    function startGame() {
+      startScreen.classList.add('hidden');
+      hud.classList.remove('hidden');
+      gameArea.classList.remove('hidden');
+
+      gameArea.innerHTML = '';
+      finalMessageEl.classList.add('hidden');
+      restartBtn.classList.add('hidden');
+      comboBadge.classList.remove('active');
+
+      remainingTime = timeLimit;
+      score = 0;
+      comboCount = 0;
+      lastPopTime = 0;
+      gameFinished = false;
+
+      timeLeftEl.textContent = String(remainingTime);
+      scoreEl.textContent = String(score);
+
+      // 初始生成 7 个气球
+      for (let i = 0; i < 7; i += 1) {
+        makeBalloon();
+      }
+
+      // 定期平滑刷出气球
+      if (balloonSpawnerId) clearInterval(balloonSpawnerId);
+      balloonSpawnerId = setInterval(() => {
+        if (!gameFinished && gameArea.children.length < 8) {
+          makeBalloon();
+        }
+      }, 400);
+
+      if (timerId) clearInterval(timerId);
+      timerId = setInterval(updateTimer, 1000);
+    }
+
+    /* 画面微光粒子 */
+    function initParticles() {
+      const canvas = document.getElementById('particleCanvas');
+      const ctx = canvas.getContext('2d');
+      let width = (canvas.width = window.innerWidth);
+      let height = (canvas.height = window.innerHeight);
+
+      window.addEventListener('resize', () => {
+        width = canvas.width = window.innerWidth;
+        height = canvas.height = window.innerHeight;
+      });
+
+      const particles = Array.from({ length: 25 }, () => ({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        radius: Math.random() * 2.5 + 1,
+        alpha: Math.random() * 0.5 + 0.2,
+        speedY: Math.random() * 0.3 + 0.1,
+        speedX: Math.random() * 0.2 - 0.1
+      }));
+
+      function render() {
+        ctx.clearRect(0, 0, width, height);
+        particles.forEach((p) => {
+          p.y -= p.speedY;
+          p.x += p.speedX;
+
+          if (p.y < -10) p.y = height + 10;
+          if (p.x < -10) p.x = width + 10;
+          if (p.x > width + 10) p.x = -10;
+
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(255, 255, 255, ${p.alpha})`;
+          ctx.fill();
+        });
+        requestAnimationFrame(render);
+      }
+      render();
+    }
+
+    startBtn.addEventListener('click', () => {
+      ensureAudio();
+      startGame();
+    });
+
+    restartBtn.addEventListener('click', () => {
+      startGame();
+    });
+
+    window.addEventListener('pointerdown', () => {
+      ensureAudio();
+    }, { once: true });
+
+    initParticles();
+  </script>
+</body>
+</html>
